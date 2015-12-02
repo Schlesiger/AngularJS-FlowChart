@@ -9,10 +9,16 @@ angular.module('flowChart', ['dragging'] )
 .directive('flowChart', function() {
   return {
   	restrict: 'E',
-  	templateUrl: "flowchart/flowchart_template.html",
+  	transclude: {
+		'flowChartHtml':	'?',
+		'flowChartSvg':		'?'
+	},
+  	templateUrl: "/lib/AngularJS-FlowChart/flowchart/flowchart_template.html",
   	replace: true,
   	scope: {
-  		chart: "=chart",
+  		chart:		"=chart",
+  		linesAbove: "=?",
+  		recordHistory:	"&?"
   	},
 
   	//
@@ -21,7 +27,7 @@ angular.module('flowChart', ['dragging'] )
   	// it is painful to unit test a directive without instantiating the DOM 
   	// (which is possible, just not ideal).
   	//
-  	controller: 'FlowChartController',
+  	controller: 'FlowChartController'
   };
 })
 
@@ -81,6 +87,15 @@ angular.module('flowChart', ['dragging'] )
 .controller('FlowChartController', ['$scope', 'dragging', '$element', function FlowChartController ($scope, dragging, $element) {
 
 	var controller = this;
+	
+	/* For testing only */
+	$scope.log = function(val){
+		console.log(val);
+	}
+	$scope.$scope = $scope;
+	
+	/* Reasonable defaults */
+	if ($scope.linesAbove == undefined) $scope.linesAbove = true;
 
 	//
 	// Reference to the document and jQuery, can be overridden for testting.
@@ -181,12 +196,12 @@ angular.module('flowChart', ['dragging'] )
 	//
 	// Translate the coordinates so they are relative to the svg element.
 	//
-	this.translateCoordinates = function(x, y, evt) {
+	this.translateCoordinates = function(x, y) {
 		var svg_elem =  $element.get(0);
 		var matrix = svg_elem.getScreenCTM();
 		var point = svg_elem.createSVGPoint();
-		point.x = x - evt.view.pageXOffset;
-		point.y = y - evt.view.pageYOffset;
+		point.x = x;
+		point.y = y;
 		return point.matrixTransform(matrix.inverse());
 	};
 
@@ -204,7 +219,7 @@ angular.module('flowChart', ['dragging'] )
 			//
 			dragStarted: function (x, y) {
 				$scope.dragSelecting = true;
-				var startPoint = controller.translateCoordinates(x, y, evt);
+				var startPoint = controller.translateCoordinates(x, y);
 				$scope.dragSelectionStartPoint = startPoint;
 				$scope.dragSelectionRect = {
 					x: startPoint.x,
@@ -219,7 +234,7 @@ angular.module('flowChart', ['dragging'] )
 			//
 			dragging: function (x, y) {
 				var startPoint = $scope.dragSelectionStartPoint;
-				var curPoint = controller.translateCoordinates(x, y, evt);
+				var curPoint = controller.translateCoordinates(x, y);
 
 				$scope.dragSelectionRect = {
 					x: curPoint.x > startPoint.x ? startPoint.x : curPoint.x,
@@ -298,7 +313,7 @@ angular.module('flowChart', ['dragging'] )
 			//
 			dragStarted: function (x, y) {
 
-				lastMouseCoords = controller.translateCoordinates(x, y, evt);
+				lastMouseCoords = controller.translateCoordinates(x, y);
 
 				//
 				// If nothing is selected when dragging starts, 
@@ -314,8 +329,10 @@ angular.module('flowChart', ['dragging'] )
 			// Dragging selected nodes... update their x,y coordinates.
 			//
 			dragging: function (x, y) {
+				
+				chart.handleNodeClicked(node, evt.ctrlKey);
 
-				var curCoords = controller.translateCoordinates(x, y, evt);
+				var curCoords = controller.translateCoordinates(x, y);
 				var deltaX = curCoords.x - lastMouseCoords.x;
 				var deltaY = curCoords.y - lastMouseCoords.y;
 
@@ -330,8 +347,13 @@ angular.module('flowChart', ['dragging'] )
 			clicked: function () {
 				chart.handleNodeClicked(node, evt.ctrlKey);
 			},
+			
+			dragEnded: function() {
+				$scope.recordHistory();
+			}
 
 		});
+		
 	};
 
 	//
@@ -351,67 +373,72 @@ angular.module('flowChart', ['dragging'] )
 	//
 	$scope.connectorMouseDown = function (evt, node, connector, connectorIndex, isInputConnector) {
 
-		//
-		// Initiate dragging out of a connection.
-		//
-		dragging.startDrag(evt, {
+		if (connector._childNode == undefined) {
 
 			//
-			// Called when the mouse has moved greater than the threshold distance
-			// and dragging has commenced.
+			// Initiate dragging out of a connection.
 			//
-			dragStarted: function (x, y) {
+			dragging.startDrag(evt, {
 
-				var curCoords = controller.translateCoordinates(x, y, evt);
+				//
+				// Called when the mouse has moved greater than the threshold distance
+				// and dragging has commenced.
+				//
+				dragStarted: function (x, y) {
 
-				$scope.draggingConnection = true;
-				$scope.dragPoint1 = flowchart.computeConnectorPos(node, connectorIndex, isInputConnector);
-				$scope.dragPoint2 = {
-					x: curCoords.x,
-					y: curCoords.y
-				};
-				$scope.dragTangent1 = flowchart.computeConnectionSourceTangent($scope.dragPoint1, $scope.dragPoint2);
-				$scope.dragTangent2 = flowchart.computeConnectionDestTangent($scope.dragPoint1, $scope.dragPoint2);
-			},
+					var curCoords = controller.translateCoordinates(x, y);				
 
-			//
-			// Called on mousemove while dragging out a connection.
-			//
-			dragging: function (x, y, evt) {
-				var startCoords = controller.translateCoordinates(x, y, evt);
-				$scope.dragPoint1 = flowchart.computeConnectorPos(node, connectorIndex, isInputConnector);
-				$scope.dragPoint2 = {
-					x: startCoords.x,
-					y: startCoords.y
-				};
-				$scope.dragTangent1 = flowchart.computeConnectionSourceTangent($scope.dragPoint1, $scope.dragPoint2);
-				$scope.dragTangent2 = flowchart.computeConnectionDestTangent($scope.dragPoint1, $scope.dragPoint2);
-			},
+					$scope.draggingConnection = true;
+					$scope.dragPoint1 = flowchart.computeConnectorPos(node, connectorIndex, isInputConnector);
+					$scope.dragPoint2 = {
+						x: curCoords.x,
+						y: curCoords.y
+					};
+					$scope.dragTangent1 = flowchart.computeConnectionSourceTangent($scope.dragPoint1, $scope.dragPoint2);
+					$scope.dragTangent2 = flowchart.computeConnectionDestTangent($scope.dragPoint1, $scope.dragPoint2);
+				},
 
-			//
-			// Clean up when dragging has finished.
-			//
-			dragEnded: function () {
+				//
+				// Called on mousemove while dragging out a connection.
+				//
+				dragging: function (x, y, evt) {
+					var startCoords = controller.translateCoordinates(x, y);				
+					$scope.dragPoint1 = flowchart.computeConnectorPos(node, connectorIndex, isInputConnector);
+					$scope.dragPoint2 = {
+						x: startCoords.x,
+						y: startCoords.y
+					};
+					$scope.dragTangent1 = flowchart.computeConnectionSourceTangent($scope.dragPoint1, $scope.dragPoint2);
+					$scope.dragTangent2 = flowchart.computeConnectionDestTangent($scope.dragPoint1, $scope.dragPoint2);
+				},
 
-				if ($scope.mouseOverConnector && 
-					$scope.mouseOverConnector !== connector) {
+				//
+				// Clean up when dragging has finished.
+				//
+				dragEnded: function () {
 
-					//
-					// Dragging has ended...
-					// The mouse is over a valid connector...
-					// Create a new connection.
-					//
-					$scope.chart.createNewConnection(connector, $scope.mouseOverConnector);
-				}
+					if ($scope.mouseOverConnector
+						&& $scope.mouseOverConnector !== connector
+						&& $scope.mouseOverConnector._childNode == undefined
+						&& $scope.mouseOverConnector.parentNode().inputConnectors.indexOf($scope.mouseOverConnector) > -1) {
 
-				$scope.draggingConnection = false;
-				delete $scope.dragPoint1;
-				delete $scope.dragTangent1;
-				delete $scope.dragPoint2;
-				delete $scope.dragTangent2;
-			},
+						//
+						// Dragging has ended...
+						// The mouse is over a valid connector...
+						// Create a new connection.
+						//
+						$scope.chart.createNewConnection(connector, $scope.mouseOverConnector);
+					}
 
-		});
+					$scope.draggingConnection = false;
+					delete $scope.dragPoint1;
+					delete $scope.dragTangent1;
+					delete $scope.dragPoint2;
+					delete $scope.dragTangent2;
+				},
+
+			});
+		};
 	};
 }])
 ;

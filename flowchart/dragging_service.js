@@ -4,16 +4,15 @@ angular.module('dragging', ['mouseCapture', ] )
 //
 // Service used to help with dragging and clicking on elements.
 //
-.factory('dragging', ['$rootScope', 'mouseCapture',function ($rootScope, mouseCapture) {
+.factory('dragging', function ($rootScope, mouseCapture) {
 
 	//
 	// Threshold for dragging.
 	// When the mouse moves by at least this amount dragging starts.
 	//
-	var threshold = 5;
+	var threshold = 10;
 
 	return {
-
 
 		//
 		// Called by users of the service to register a mousedown event and start dragging.
@@ -31,8 +30,10 @@ angular.module('dragging', ['mouseCapture', ] )
 	  		var mouseMove = function (evt) {
 
 				if (!dragging) {
-					if (Math.abs(evt.pageX - x) > threshold ||
-						Math.abs(evt.pageY - y) > threshold)
+					if (evt.pageX - x > threshold ||
+						evt.pageY - y > threshold ||
+						evt.pageX - x < -threshold ||
+						evt.pageY - y < -threshold)
 					{
 						dragging = true;
 
@@ -101,7 +102,6 @@ angular.module('dragging', ['mouseCapture', ] )
 
 	};
 
-}])
+})
 
 ;
-
