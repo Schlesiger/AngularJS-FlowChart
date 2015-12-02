@@ -13,7 +13,7 @@ angular.module('flowChart', ['dragging'] )
 		'flowChartHtml':	'?',
 		'flowChartSvg':		'?'
 	},
-  	templateUrl: "/lib/AngularJS-FlowChart/flowchart/flowchart_template.html",
+  	templateUrl: "../flowchart/flowchart_template.html",
   	replace: true,
   	scope: {
   		chart:		"=chart",
@@ -349,7 +349,7 @@ angular.module('flowChart', ['dragging'] )
 			},
 			
 			dragEnded: function() {
-				$scope.recordHistory();
+				if ($scope.recordHistory) $scope.recordHistory();
 			}
 
 		});
